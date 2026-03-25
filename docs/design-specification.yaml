@@ -1,0 +1,263 @@
+# Azure Retirement Intelligence + ServiceNow Change Workflow
+# Design Specification
+
+diagram:
+  title: "Azure Retirement Intelligence + ServiceNow Change Workflow"
+  intent: >
+    Programmatically detect upcoming Azure service/feature retirements across subscriptions,
+    assess impact to resources, generate change recommendations and best practices,
+    and automate incident/change workflows in ServiceNow.
+
+  layout:
+    direction: left-to-right
+    groupPadding: 20
+
+  personas:
+    - id: ops_engineer
+      label: "Cloud Ops / SRE"
+    - id: change_manager
+      label: "Change Manager / CAB"
+    - id: app_owner
+      label: "Application Owner"
+    - id: finops
+      label: "FinOps / Cost Governance"
+
+  boundaries:
+    - id: azure
+      label: "Microsoft Azure"
+      style: "cloud"
+    - id: automation
+      label: "Automation & Agent Orchestration"
+      style: "platform"
+    - id: servicenow
+      label: "ServiceNow"
+      style: "saas"
+    - id: identity
+      label: "Identity & Secrets"
+      style: "security"
+
+  components:
+    # --- Azure signal sources ---
+    - id: advisor_workbook
+      boundary: azure
+      type: "service"
+      label: "Azure Advisor: Service Retirement Workbook"
+      notes:
+        - "Centralized view of service retirements and impacted resources."
+        - "Retirements data can be pulled via Advisor APIs / Azure Resource Graph."
+
+    - id: advisor_api
+      boundary: azure
+      type: "api"
+      label: "Azure Advisor APIs"
+      notes:
+        - "Automation pull for retirement recommendations."
+
+    - id: azure_resource_graph
+      boundary: azure
+      type: "query"
+      label: "Azure Resource Graph"
+      notes:
+        - "Alternative query path for retirements data."
+
+    - id: service_health
+      boundary: azure
+      type: "service"
+      label: "Azure Service Health (Retirement Announcements)"
+      notes:
+        - "Portal notifications + retirement announcements are part of existing comms channels."
+
+    # --- Automation & agent layer ---
+    - id: scheduler
+      boundary: automation
+      type: "service"
+      label: "Scheduler (Daily/Hourly)"
+      notes:
+        - "Triggers discovery + correlation runs."
+
+    - id: retirement_collector
+      boundary: automation
+      type: "microservice"
+      label: "Retirement Collector"
+      responsibilities:
+        - "Query retirements across subscriptions"
+        - "Normalize and deduplicate events"
+        - "Store results for reporting & agent use"
+      inputs:
+        - "Advisor APIs"
+        - "Azure Resource Graph"
+        - "Service Health announcements"
+
+    - id: impact_analyzer
+      boundary: automation
+      type: "microservice"
+      label: "Impact Analyzer"
+      responsibilities:
+        - "Map retirements to resources, apps, owners"
+        - "Determine urgency based on retirement date + blast radius"
+        - "Enrich with migration guidance references"
+      notes:
+        - "Workbook provides impacted resources + migration instructions where available."
+
+    - id: best_practice_engine
+      boundary: automation
+      type: "service"
+      label: "Best Practice & Change Guidance Engine"
+      responsibilities:
+        - "Generate change plan checklist (risk, testing, rollback, comms)"
+        - "Suggest governance actions (CAB, approvals, comms templates)"
+        - "Produce remediation runbook outline"
+      notes:
+        - "Keep outputs aligned to org change management standards."
+
+    - id: agent_orchestrator
+      boundary: automation
+      type: "agent"
+      label: "Automation Agent (Ticketing + Change Initiation)"
+      responsibilities:
+        - "Decide when to open Incident vs Change vs Problem"
+        - "Create/Update tickets in ServiceNow"
+        - "Attach impact analysis, affected assets, and recommended actions"
+        - "Track status and re-notify if deadlines approach"
+
+    - id: data_store
+      boundary: automation
+      type: "database"
+      label: "Retirement Intelligence Store"
+      data:
+        - "retirements"
+        - "impacted_resources"
+        - "ownership_mapping"
+        - "ticket_links"
+        - "change_plans"
+
+    - id: dashboard
+      boundary: automation
+      type: "bi"
+      label: "Reporting Dashboard (Ops / Exec / FinOps)"
+      outputs:
+        - "Top upcoming retirements"
+        - "Subscriptions at risk"
+        - "Trend + completion rate"
+        - "Cost / risk posture views"
+
+    # --- ServiceNow side ---
+    - id: snow_incident
+      boundary: servicenow
+      type: "module"
+      label: "ServiceNow: Incident"
+
+    - id: snow_change
+      boundary: servicenow
+      type: "module"
+      label: "ServiceNow: Change (ITIL/CAB)"
+
+    - id: snow_cmdb
+      boundary: servicenow
+      type: "module"
+      label: "ServiceNow: CMDB (Apps/Services/Owners)"
+
+    - id: itsm_connector
+      boundary: azure
+      type: "integration"
+      label: "Azure Monitor: ITSM Connector (ServiceNow)"
+      notes:
+        - "Configures connection between ServiceNow and ITSM Connector in Log Analytics."
+        - "Deprecation note exists for ITSM actions path starting Sept 2022."
+
+    # --- Identity & secrets ---
+    - id: entra_id
+      boundary: identity
+      type: "identity"
+      label: "Microsoft Entra ID (App/MI)"
+      responsibilities:
+        - "Auth for Azure APIs"
+        - "Least privilege across subscriptions"
+
+    - id: secret_store
+      boundary: identity
+      type: "vault"
+      label: "Secrets Store (Tokens/Keys)"
+      responsibilities:
+        - "Store ServiceNow credentials/tokens"
+        - "Rotate secrets"
+
+  flows:
+    - id: f1
+      from: scheduler
+      to: retirement_collector
+      label: "Trigger collection run"
+
+    - id: f2
+      from: retirement_collector
+      to: advisor_api
+      label: "Pull retirement recommendations (API)"
+
+    - id: f3
+      from: retirement_collector
+      to: azure_resource_graph
+      label: "Query retirements data (ARG)"
+
+    - id: f4
+      from: retirement_collector
+      to: service_health
+      label: "Ingest retirement announcements"
+
+    - id: f5
+      from: retirement_collector
+      to: data_store
+      label: "Persist normalized retirements"
+
+    - id: f6
+      from: impact_analyzer
+      to: data_store
+      label: "Read retirements + write impact results"
+
+    - id: f7
+      from: impact_analyzer
+      to: snow_cmdb
+      label: "Resolve owners/apps via CMDB"
+
+    - id: f8
+      from: best_practice_engine
+      to: agent_orchestrator
+      label: "Provide change checklist + plan"
+
+    - id: f9
+      from: agent_orchestrator
+      to: snow_incident
+      label: "Create/Update Incident (if urgent break/fix)"
+
+    - id: f10
+      from: agent_orchestrator
+      to: snow_change
+      label: "Create/Update Change Request (CAB workflow)"
+
+    - id: f11
+      from: itsm_connector
+      to: snow_incident
+      label: "Optional: Alerts/events → Incident"
+      note: "Uses Azure Monitor ITSM Connector integration path."
+
+    - id: f12
+      from: data_store
+      to: dashboard
+      label: "PowerBI/Reporting queries"
+
+  security:
+    principles:
+      - "Least privilege across subscriptions via Entra ID app or managed identity"
+      - "No long-lived secrets in code; store tokens in secrets vault"
+      - "Audit trail: ticket IDs + change approvals linked back to retirement IDs"
+    controls:
+      - id: s1
+        label: "RBAC scoped at Management Group / Subscription"
+      - id: s2
+        label: "Secret rotation + OAuth token management for ServiceNow"
+      - id: s3
+        label: "Logging + alerting for failed ticket creation / workflow execution"
+
+  outputs:
+    - "Ranked list of upcoming retirements by date + impacted resources"
+    - "ServiceNow Incident/Change records with impact + recommended actions"
+    - "Executive dashboard view of risk posture and remediation progress"

@@ -1,0 +1,82 @@
+---
+title: Azure Retirement Intelligence + ServiceNow Change Workflow
+---
+flowchart LR
+    %% ═══ Azure Signal Sources ═══
+    subgraph azure ["Microsoft Azure"]
+        advisor_wb["Advisor: Service<br/>Retirement Workbook"]
+        advisor_api[/"Advisor APIs"/]
+        arg[/"Azure Resource Graph"/]
+        svc_health["Service Health<br/>Retirement Announcements"]
+        itsm["Azure Monitor:<br/>ITSM Connector"]
+        advisor_wb -.- advisor_api
+        advisor_wb -.- arg
+    end
+
+    %% ═══ Automation & Orchestration ═══
+    subgraph auto ["Automation & Agent Orchestration"]
+        sched(["Scheduler - Daily/Hourly"])
+        collector["Retirement Collector"]
+        analyzer["Impact Analyzer"]
+        bpe["Best Practice &<br/>Change Guidance Engine"]
+        agent{{"Automation Agent<br/>Ticketing + Change"}}
+        store[("Retirement<br/>Intelligence Store")]
+        dash["Reporting Dashboard<br/>Ops / Exec / FinOps"]
+    end
+
+    %% ═══ ServiceNow ═══
+    subgraph snow ["ServiceNow"]
+        incident["Incident"]
+        chg["Change - ITIL/CAB"]
+        cmdb["CMDB<br/>Apps / Services / Owners"]
+    end
+
+    %% ═══ Identity & Secrets ═══
+    subgraph idp ["Identity & Secrets"]
+        entra["Microsoft Entra ID<br/>App / Managed Identity"]
+        vault[("Secrets Store<br/>Tokens / Keys")]
+    end
+
+    %% ═══ Personas ═══
+    ops(["Cloud Ops / SRE"])
+    cam(["Change Manager / CAB"])
+    apo(["Application Owner"])
+    fin(["FinOps / Cost Governance"])
+
+    %% ═══ Core Data Flows ═══
+    sched -->|"Trigger collection"| collector
+    collector -->|"Pull retirement recs"| advisor_api
+    collector -->|"Query retirements"| arg
+    collector -->|"Ingest announcements"| svc_health
+    collector -->|"Persist data"| store
+    analyzer <-->|"Read/write impact"| store
+    analyzer -->|"Resolve owners"| cmdb
+    analyzer --> bpe
+    bpe -->|"Change checklist + plan"| agent
+    agent -->|"Create/Update Incident"| incident
+    agent -->|"Create/Update Change"| chg
+    itsm -.->|"Alerts to Incident"| incident
+    store -->|"BI / reporting"| dash
+
+    %% ═══ Persona Touchpoints ═══
+    dash -.-> ops
+    dash -.-> fin
+    chg -.-> cam
+    incident -.-> apo
+
+    %% ═══ Identity Flows ═══
+    entra -. Auth .-> collector
+    vault -. Credentials .-> agent
+
+    %% ═══ Styles ═══
+    classDef azureNode fill:#E6F2FF,stroke:#0078D4,stroke-width:2px,color:#003A6C
+    classDef autoNode fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#1B5E20
+    classDef snowNode fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#BF360C
+    classDef idpNode fill:#FFF8E1,stroke:#F57F17,stroke-width:2px,color:#E65100
+    classDef persona fill:#F3E5F5,stroke:#7B1FA2,stroke-width:1px,color:#4A148C
+
+    class advisor_wb,advisor_api,arg,svc_health,itsm azureNode
+    class sched,collector,analyzer,bpe,agent,store,dash autoNode
+    class incident,chg,cmdb snowNode
+    class entra,vault idpNode
+    class ops,cam,apo,fin persona
